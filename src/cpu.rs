@@ -1,3 +1,4 @@
+use crate::display;
 use crate::keypad;
 use rand;
 
@@ -11,7 +12,7 @@ pub struct CPU {
     sound_timer: u8,
     registers: [u8; 16],
     opcode: u16,
-    //display,
+    display: display::Display,
     keypad: keypad::Keypad,
 }
 
@@ -24,7 +25,7 @@ static FONTSET: [u8; 80] = [
 ];
 
 impl CPU {
-    pub fn new() -> CPU {
+    pub fn new(display: display::Display) -> CPU {
         let mut cpu = CPU {
             ram: [0; 4096],
             pc: 0,
@@ -36,6 +37,7 @@ impl CPU {
             registers: [0; 16],
             opcode: 0,
             keypad: keypad::Keypad::new(),
+            display,
         };
 
         // load font
@@ -137,7 +139,9 @@ impl CPU {
     }
 
     // Clear screen
-    fn CLS(&mut self) {}
+    fn CLS(&mut self) {
+        self.display.clear();
+    }
 
     // Return
     fn RET(&mut self) {
@@ -276,7 +280,13 @@ impl CPU {
     }
 
     // Draw sprite
-    fn DRW(&mut self) {}
+    fn DRW(&mut self) {
+        let (from, to) = (self.i as usize, (self.i + self.opcode & 0x000F) as usize);
+        let (x, y) = (self.registers[self.x()] % 64, self.registers[self.y()] % 32);
+        let sprite = &self.ram[from..=to];
+
+        self.registers[0xF] = self.display.draw_sprite(x as usize, y as usize, sprite) as u8;
+    }
 
     // Skip next instruction if key pressed
     fn SKP(&mut self) {
