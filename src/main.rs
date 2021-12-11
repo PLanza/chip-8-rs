@@ -1,5 +1,6 @@
 mod cpu;
+mod keypad;
 
 fn main() {
-    println!("Hello, world!");
+    let chip_8 = cpu::CPU::new();
 }

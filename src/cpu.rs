@@ -1,3 +1,4 @@
+use crate::keypad;
 use rand;
 
 pub struct CPU {
@@ -11,12 +12,20 @@ pub struct CPU {
     registers: [u8; 16],
     opcode: u16,
     //display,
-    //keypad,
+    keypad: keypad::Keypad,
 }
+
+static FONTSET: [u8; 80] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, 0x20, 0x60, 0x20, 0x20, 0x70, 0xF0, 0x10, 0xF0, 0x80, 0xF0, 0xF0,
+    0x10, 0xF0, 0x10, 0xF0, 0x90, 0x90, 0xF0, 0x10, 0x10, 0xF0, 0x80, 0xF0, 0x10, 0xF0, 0xF0, 0x80,
+    0xF0, 0x90, 0xF0, 0xF0, 0x10, 0x20, 0x40, 0x40, 0xF0, 0x90, 0xF0, 0x90, 0xF0, 0xF0, 0x90, 0xF0,
+    0x10, 0xF0, 0xF0, 0x90, 0xF0, 0x90, 0x90, 0xE0, 0x90, 0xE0, 0x90, 0xE0, 0xF0, 0x80, 0x80, 0x80,
+    0xF0, 0xE0, 0x90, 0x90, 0x90, 0xE0, 0xF0, 0x80, 0xF0, 0x80, 0xF0, 0xF0, 0x80, 0xF0, 0x80, 0x80,
+];
 
 impl CPU {
     pub fn new() -> CPU {
-        CPU {
+        let mut cpu = CPU {
             ram: [0; 4096],
             pc: 0,
             i: 0,
@@ -26,7 +35,15 @@ impl CPU {
             sound_timer: 0,
             registers: [0; 16],
             opcode: 0,
+            keypad: keypad::Keypad::new(),
+        };
+
+        // load font
+        for i in 0..80 {
+            cpu.ram[i + 0x50] = FONTSET[i];
         }
+
+        cpu
     }
 
     pub fn execute_cycle(&mut self) {
@@ -35,6 +52,15 @@ impl CPU {
 
         // Decode
         self.execute();
+
+        // Apparently this should only be done 60 times per second
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+        if self.sound_timer > 0 {
+            // play sound
+            self.sound_timer -= 1;
+        }
     }
 
     fn execute(&mut self) {
@@ -97,10 +123,21 @@ impl CPU {
         }
     }
 
-    // Clear screen
-    fn CLS(&mut self) {
-        // clear display
+    fn x(&mut self) -> usize {
+        (self.opcode & 0x0F00 >> 8) as usize
     }
+    fn y(&mut self) -> usize {
+        (self.opcode & 0x00F0 >> 4) as usize
+    }
+    fn imm(&mut self) -> u8 {
+        (self.opcode & 0x00FF) as u8
+    }
+    fn addr(&mut self) -> usize {
+        (self.opcode & 0x0FFF) as usize
+    }
+
+    // Clear screen
+    fn CLS(&mut self) {}
 
     // Return
     fn RET(&mut self) {
@@ -110,228 +147,186 @@ impl CPU {
 
     // Jump
     fn JP(&mut self) {
-        let addr = (self.opcode & 0x0FFF) as usize;
-        self.pc = addr;
+        self.pc = self.addr();
     }
 
     // Call
     fn CALL(&mut self) {
-        let addr = (self.opcode & 0x0FFF) as usize;
         self.stack[self.sp] = self.pc as u16;
         self.sp += 1;
-        self.pc = addr
+        self.pc = self.addr();
     }
 
     // Skip if equal to immediate
     fn SEI(&mut self) {
-        let x = (self.opcode & 0x0F00) as usize;
-        let imm = (self.opcode & 0x00FF) as u8;
-
-        if self.registers[x] == imm {
+        if self.registers[self.x()] == self.imm() {
             self.pc += 2;
         }
     }
 
     // Skip if not equal to immediate
     fn SNEI(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let imm = (self.opcode & 0x00FF) as u8;
-
-        if self.registers[x] != imm {
+        if self.registers[self.x()] != self.imm() {
             self.pc += 2;
         }
     }
 
     // Skip if equal registers
     fn SER(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let y = (self.opcode & 0x00F0 >> 4) as usize;
-
-        if self.registers[x] == self.registers[y] {
+        if self.registers[self.x()] == self.registers[self.y()] {
             self.pc += 2;
         }
     }
 
     // Load immediate
     fn LDI(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let imm = (self.opcode & 0x00FF) as u8;
-
-        self.registers[x] = imm;
+        self.registers[self.x()] = self.imm();
     }
 
     // Add immediate
     fn ADDI(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let imm = self.opcode & 0x00FF;
-
-        let tmp: u16 = self.registers[x] as u16 + imm;
-        self.registers[x] = (tmp & 0x00FF) as u8;
+        let tmp = (self.registers[self.x()] + self.imm()) as u16;
+        self.registers[self.x()] = (tmp & 0x00FF) as u8;
     }
 
     // Load register
     fn LDR(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let y = (self.opcode & 0x00F0 >> 4) as usize;
-
-        self.registers[x] = self.registers[y];
+        self.registers[self.x()] = self.registers[self.y()];
     }
 
     // OR registers
     fn OR(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let y = (self.opcode & 0x00F0 >> 4) as usize;
-
-        self.registers[x] |= self.registers[y];
+        self.registers[self.x()] |= self.registers[self.y()];
     }
 
     // AND registers
     fn AND(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let y = (self.opcode & 0x00F0 >> 4) as usize;
-
-        self.registers[x] &= self.registers[y];
+        self.registers[self.x()] &= self.registers[self.y()];
     }
 
     // XOR registers
     fn XOR(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let y = (self.opcode & 0x00F0 >> 4) as usize;
-
-        self.registers[x] ^= self.registers[y];
+        self.registers[self.x()] ^= self.registers[self.y()];
     }
 
     // Add registers
     fn ADDR(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let y = (self.opcode & 0x00F0 >> 4) as usize;
+        let tmp: u16 = self.registers[self.x()] as u16 + self.registers[self.y()] as u16;
 
-        let tmp: u16 = self.registers[x] as u16 + self.registers[y] as u16;
-        self.registers[x] = (tmp & 0x00FF) as u8;
+        self.registers[self.x()] = (tmp & 0x00FF) as u8;
         self.registers[0xF] = (tmp & 0x0F00 >> 8) as u8; // Carry bit
     }
 
     // Subtract registers x - y
     fn SUB(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let y = (self.opcode & 0x00F0 >> 4) as usize;
-
         // NOT borrow
-        if self.registers[x] > self.registers[y] {
+        if self.registers[self.x()] > self.registers[self.y()] {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
         };
 
-        self.registers[x] -= self.registers[y];
+        self.registers[self.x()] -= self.registers[self.y()];
     }
 
     // Shift register x right 1 bit storing carry
     fn SHR(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let _y = (self.opcode & 0x00F0 >> 4) as usize; // Ignored
-
-        self.registers[0xF] = self.registers[x] & 0x01;
-        self.registers[x] >>= 1;
+        self.registers[0xF] = self.registers[self.x()] & 0x01;
+        self.registers[self.x()] >>= 1;
     }
 
     // Subtract registers y - x
     fn SUBN(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let y = (self.opcode & 0x00F0 >> 4) as usize;
-
         // NOT borrow
-        if self.registers[y] > self.registers[x] {
+        if self.registers[self.y()] > self.registers[self.x()] {
             self.registers[0xF] = 1;
         } else {
             self.registers[0xF] = 0;
         }
 
-        self.registers[x] = self.registers[y] - self.registers[x];
+        self.registers[self.x()] = self.registers[self.y()] - self.registers[self.x()];
     }
 
     // Shift register x left 1 bit storing carry
     fn SHL(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let _y = (self.opcode & 0x00F0 >> 4) as usize; // Ignored
-
-        self.registers[0xF] = self.registers[x] >> 7;
-        self.registers[x] <<= 1;
+        self.registers[0xF] = self.registers[self.x()] >> 7;
+        self.registers[self.x()] <<= 1;
     }
 
     // Skip if not equal registers
     fn SNER(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let y = (self.opcode & 0x00F0 >> 4) as usize;
-
-        if self.registers[x] != self.registers[y] {
+        if self.registers[self.x()] != self.registers[self.y()] {
             self.pc += 2;
         }
     }
 
     // Load into index register
     fn LDIN(&mut self) {
-        let addr = self.opcode & 0x0FFF;
-        self.i = addr;
+        self.i = self.addr() as u16;
     }
 
     // Jump to address plus the value of V0
     fn JPA(&mut self) {
-        let addr = (self.opcode & 0x0FFF) as usize;
-        self.pc = addr + self.registers[0] as usize;
+        self.pc = self.addr() + self.registers[0] as usize;
     }
 
     // Genereate random number from 0 to 255, AND it with last two bits
     fn RND(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let imm = (self.opcode & 0x00FF) as u8;
-
-        self.registers[x] = rand::random::<u8>() & imm;
+        self.registers[self.x()] = rand::random::<u8>() & self.imm();
     }
 
     // Draw sprite
     fn DRW(&mut self) {}
 
     // Skip next instruction if key pressed
-    fn SKP(&mut self) {}
+    fn SKP(&mut self) {
+        let key = self.x();
+        if self.keypad.is_pressed(key) {
+            self.pc += 2;
+        }
+    }
 
     // Skip next instruction if key not pressed
-    fn SKNP(&mut self) {}
+    fn SKNP(&mut self) {
+        let key = self.x();
+        if !self.keypad.is_pressed(key) {
+            self.pc += 2;
+        }
+    }
 
     // Load delay timer to register
     fn LDDT(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        self.registers[x] = self.delay_timer
+        self.registers[self.x()] = self.delay_timer
     }
 
-    // Store key value to register
-    fn STK(&mut self) {}
+    // Blocking store pressed key value to register
+    fn STK(&mut self) {
+        self.registers[self.x()] = self.keypad.wait_for_keypress() as u8;
+    }
 
     // Set delay timer to register's value
     fn SDT(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        self.delay_timer = self.registers[x];
+        self.delay_timer = self.registers[self.x()];
     }
 
     // Set sound timer to register's value
     fn SST(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        self.sound_timer = self.registers[x];
+        self.sound_timer = self.registers[self.x()];
     }
 
     // Add index register and another
     fn ADDIN(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        self.i += self.registers[x] as u16;
+        self.i += self.registers[self.x()] as u16;
     }
 
     // Store memory location of font into index
-    fn SFT(&mut self) {}
+    fn SFT(&mut self) {
+        self.i = (0x50 + self.registers[self.x()] * 5) as u16;
+    }
 
     // Store the binary-coded decimal conversion from register into memory
     fn BCD(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-        let val = self.registers[x];
+        let val = self.registers[self.x()];
 
         self.ram[self.i as usize] = val / 100;
         self.ram[(self.i + 1) as usize] = (val % 100) / 10;
@@ -340,18 +335,14 @@ impl CPU {
 
     // Store registers 0..x into memory
     fn ST(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-
-        for i in (0..=x) {
+        for i in 0..=self.x() {
             self.ram[self.i as usize + i] = self.registers[i];
         }
     }
 
     // Load memory into registers 0..x
     fn LD(&mut self) {
-        let x = (self.opcode & 0x0F00 >> 8) as usize;
-
-        for i in (0..=x) {
+        for i in 0..=self.x() {
             self.registers[i] = self.ram[self.i as usize + i];
         }
     }
@@ -361,11 +352,3 @@ impl CPU {
         self.pc += 2;
     }
 }
-
-static FONTSET: [u8; 80] = [
-    0xF0, 0x90, 0x90, 0x90, 0xF0, 0x20, 0x60, 0x20, 0x20, 0x70, 0xF0, 0x10, 0xF0, 0x80, 0xF0, 0xF0,
-    0x10, 0xF0, 0x10, 0xF0, 0x90, 0x90, 0xF0, 0x10, 0x10, 0xF0, 0x80, 0xF0, 0x10, 0xF0, 0xF0, 0x80,
-    0xF0, 0x90, 0xF0, 0xF0, 0x10, 0x20, 0x40, 0x40, 0xF0, 0x90, 0xF0, 0x90, 0xF0, 0xF0, 0x90, 0xF0,
-    0x10, 0xF0, 0xF0, 0x90, 0xF0, 0x90, 0x90, 0xE0, 0x90, 0xE0, 0x90, 0xE0, 0xF0, 0x80, 0x80, 0x80,
-    0xF0, 0xE0, 0x90, 0x90, 0x90, 0xE0, 0xF0, 0x80, 0xF0, 0x80, 0xF0, 0xF0, 0x80, 0xF0, 0x80, 0x80,
-];
