@@ -33,12 +33,12 @@ impl Display {
     pub fn draw_sprite(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool {
         let mut collision = false;
         'rows: for (i, byte) in sprite.iter().enumerate() {
-            if i + y > 32 {
+            if i + y >= 32 {
                 break 'rows;
             }
 
             'columns: for j in 0..8 {
-                if j + x > 64 {
+                if j + x >= 64 {
                     break 'columns;
                 }
 

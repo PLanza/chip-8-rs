@@ -81,11 +81,15 @@ impl CPU {
         }
     }
 
+    #[allow(dead_code)]
     pub fn print_registers(&self) {
         for i in 0..self.registers.len() {
             print!("V{}: {:x} ", i, self.registers[i]);
         }
-        println!("\ni: {:x}\n", self.i);
+        println!(
+            "\ni: {:x}, delay timer: {:x}, sound timer: {:x}\n",
+            self.i, self.delay_timer, self.sound_timer
+        );
     }
 
     fn execute(&mut self) {
@@ -241,7 +245,7 @@ impl CPU {
         let tmp = self.registers[self.x()] as u16 + self.registers[self.y()] as u16;
 
         self.registers[self.x()] = (tmp & 0x00FF) as u8;
-        self.registers[0xF] = (tmp & 0x0F00 >> 8) as u8; // Carry bit
+        self.registers[0xF] = ((tmp & 0x0F00) >> 8) as u8; // Carry bit
     }
 
     // Subtract registers x - y
@@ -253,7 +257,8 @@ impl CPU {
             self.registers[0xF] = 0;
         };
 
-        self.registers[self.x()] -= self.registers[self.y()];
+        self.registers[self.x()] =
+            (self.registers[self.x()] as i16 - self.registers[self.y()] as i16) as u8;
     }
 
     // Shift register x right 1 bit storing carry
@@ -271,7 +276,8 @@ impl CPU {
             self.registers[0xF] = 0;
         }
 
-        self.registers[self.x()] = self.registers[self.y()] - self.registers[self.x()];
+        self.registers[self.x()] =
+            (self.registers[self.y()] as i16 - self.registers[self.x()] as i16) as u8;
     }
 
     // Shift register x left 1 bit storing carry
@@ -307,7 +313,6 @@ impl CPU {
         let (from, to) = (self.i as usize, (self.i + (self.opcode & 0x000F)) as usize);
         let (x, y) = (self.registers[self.x()] % 64, self.registers[self.y()] % 32);
 
-        println!("from: {:x}, to: {:x}", from, to);
         let sprite = &self.ram[from..to];
 
         self.registers[0xF] = self.display.draw_sprite(x as usize, y as usize, sprite) as u8;
@@ -336,7 +341,10 @@ impl CPU {
 
     // Blocking store pressed key value to register
     fn STK(&mut self) {
-        self.registers[self.x()] = self.keypad.wait_for_keypress() as u8;
+        match self.keypad.wait_for_keypress() {
+            Some(val) => self.registers[self.x()] = val as u8,
+            None => self.pc -= 2,
+        }
     }
 
     // Set delay timer to register's value
