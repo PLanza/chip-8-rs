@@ -35,13 +35,13 @@ impl Keypad {
         }
     }
 
-    pub fn wait_for_keypress(&mut self) -> usize {
-        'spin: loop {
-            for i in 0..16 {
-                if self.keys[i] {
-                    break 'spin i;
-                }
+    pub fn wait_for_keypress(&mut self) -> Option<usize> {
+        for i in 0..16 {
+            if self.keys[i] {
+                return Some(i);
             }
         }
+
+        None
     }
 }

@@ -38,16 +38,13 @@ fn main() {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => break 'main,
-                Event::KeyDown { keycode: key, .. } => match key {
-                    Some(sdl2::keyboard::Keycode::Space) => {
-                        chip_8.print_registers();
-                        chip_8.execute_cycle();
-                    }
-                    key => chip_8.keypad.press(key.unwrap(), true),
-                },
+                Event::KeyDown { keycode: key, .. } => chip_8.keypad.press(key.unwrap(), true),
                 Event::KeyUp { keycode: key, .. } => chip_8.keypad.press(key.unwrap(), false),
                 _ => {}
             }
         }
+
+        chip_8.execute_cycle();
+        //chip_8.print_registers();
     }
 }
