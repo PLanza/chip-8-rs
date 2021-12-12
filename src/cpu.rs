@@ -1,6 +1,9 @@
+#![allow(non_snake_case)]
+
 use crate::display;
 use crate::keypad;
 use rand;
+use std::fs::File;
 
 pub struct CPU {
     ram: [u8; 4096],
@@ -12,8 +15,8 @@ pub struct CPU {
     sound_timer: u8,
     registers: [u8; 16],
     opcode: u16,
+    pub keypad: keypad::Keypad,
     display: display::Display,
-    keypad: keypad::Keypad,
 }
 
 static FONTSET: [u8; 80] = [
@@ -28,7 +31,7 @@ impl CPU {
     pub fn new(display: display::Display) -> CPU {
         let mut cpu = CPU {
             ram: [0; 4096],
-            pc: 0,
+            pc: 0x200,
             i: 0,
             stack: [0; 16],
             sp: 0,
@@ -48,8 +51,19 @@ impl CPU {
         cpu
     }
 
+    pub fn load_program(&mut self, file: File) {
+        let reader = std::io::Read::bytes(file);
+
+        for (i, byte) in reader.enumerate() {
+            match byte {
+                Ok(value) => self.ram[0x200 + i] = value,
+                Err(_) => {}
+            }
+        }
+    }
+
     pub fn execute_cycle(&mut self) {
-        self.opcode = (self.ram[self.pc] << 8) as u16 | self.ram[self.pc + 1] as u16;
+        self.opcode = (self.ram[self.pc] as u16) << 8 | self.ram[self.pc + 1] as u16;
         self.pc += 2;
 
         // Decode
@@ -281,7 +295,7 @@ impl CPU {
 
     // Draw sprite
     fn DRW(&mut self) {
-        let (from, to) = (self.i as usize, (self.i + self.opcode & 0x000F) as usize);
+        let (from, to) = (self.i as usize, (self.i + (self.opcode & 0x000F)) as usize);
         let (x, y) = (self.registers[self.x()] % 64, self.registers[self.y()] % 32);
         let sprite = &self.ram[from..=to];
 

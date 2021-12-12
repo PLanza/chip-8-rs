@@ -12,7 +12,9 @@ impl Display {
         let window = video_subsystem.window("Test", 640, 320).build().unwrap();
         let mut canvas = window.into_canvas().build().unwrap();
 
-        canvas.set_logical_size(64, 32);
+        canvas
+            .set_logical_size(64, 32)
+            .expect("Error setting canvas logical size");
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
         canvas.present();
@@ -59,8 +61,10 @@ impl Display {
                 } else {
                     Color::RGB(0, 0, 0)
                 });
+
                 self.canvas
-                    .draw_point(sdl2::rect::Point::new(x as i32, y as i32));
+                    .draw_point(sdl2::rect::Point::new(x as i32, y as i32))
+                    .expect("Error drawing point");
             }
         }
 
