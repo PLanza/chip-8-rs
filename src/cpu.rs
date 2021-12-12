@@ -59,11 +59,13 @@ impl CPU {
                 Ok(value) => self.ram[0x200 + i] = value,
                 Err(_) => {}
             }
+            //print!("({:x}: {:x}) ", 0x200 + i, self.ram[0x200 + i]);
         }
     }
 
     pub fn execute_cycle(&mut self) {
         self.opcode = (self.ram[self.pc] as u16) << 8 | self.ram[self.pc + 1] as u16;
+        println!("{:x} - {:x}", self.pc, self.opcode);
         self.pc += 2;
 
         // Decode
@@ -77,6 +79,13 @@ impl CPU {
             // play sound
             self.sound_timer -= 1;
         }
+    }
+
+    pub fn print_registers(&self) {
+        for i in 0..self.registers.len() {
+            print!("V{}: {:x} ", i, self.registers[i]);
+        }
+        println!("\ni: {:x}\n", self.i);
     }
 
     fn execute(&mut self) {
@@ -140,10 +149,10 @@ impl CPU {
     }
 
     fn x(&mut self) -> usize {
-        (self.opcode & 0x0F00 >> 8) as usize
+        (self.opcode as usize & 0x0F00) >> 8
     }
     fn y(&mut self) -> usize {
-        (self.opcode & 0x00F0 >> 4) as usize
+        (self.opcode as usize & 0x00F0) >> 4
     }
     fn imm(&mut self) -> u8 {
         (self.opcode & 0x00FF) as u8
@@ -203,7 +212,7 @@ impl CPU {
 
     // Add immediate
     fn ADDI(&mut self) {
-        let tmp = (self.registers[self.x()] + self.imm()) as u16;
+        let tmp = self.registers[self.x()] as u16 + self.imm() as u16;
         self.registers[self.x()] = (tmp & 0x00FF) as u8;
     }
 
@@ -229,7 +238,7 @@ impl CPU {
 
     // Add registers
     fn ADDR(&mut self) {
-        let tmp: u16 = self.registers[self.x()] as u16 + self.registers[self.y()] as u16;
+        let tmp = self.registers[self.x()] as u16 + self.registers[self.y()] as u16;
 
         self.registers[self.x()] = (tmp & 0x00FF) as u8;
         self.registers[0xF] = (tmp & 0x0F00 >> 8) as u8; // Carry bit
@@ -297,7 +306,9 @@ impl CPU {
     fn DRW(&mut self) {
         let (from, to) = (self.i as usize, (self.i + (self.opcode & 0x000F)) as usize);
         let (x, y) = (self.registers[self.x()] % 64, self.registers[self.y()] % 32);
-        let sprite = &self.ram[from..=to];
+
+        println!("from: {:x}, to: {:x}", from, to);
+        let sprite = &self.ram[from..to];
 
         self.registers[0xF] = self.display.draw_sprite(x as usize, y as usize, sprite) as u8;
     }

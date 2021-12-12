@@ -42,7 +42,7 @@ impl Display {
                     break 'columns;
                 }
 
-                if ((byte >> j) & 1) != 0 {
+                if ((byte >> (7 - j)) & 1) != 0 {
                     collision |= self.screen[i + y][j + x];
                     self.screen[i + y][j + x] ^= true;
                 }
