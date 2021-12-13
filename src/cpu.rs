@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use crate::audio;
 use crate::display;
 use crate::keypad;
 use rand;
@@ -17,6 +18,7 @@ pub struct CPU {
     opcode: u16,
     pub keypad: keypad::Keypad,
     display: display::Display,
+    audio: audio::Audio,
 }
 
 static FONTSET: [u8; 80] = [
@@ -28,7 +30,7 @@ static FONTSET: [u8; 80] = [
 ];
 
 impl CPU {
-    pub fn new(display: display::Display) -> CPU {
+    pub fn new(display: display::Display, audio: audio::Audio) -> CPU {
         let mut cpu = CPU {
             ram: [0; 4096],
             pc: 0x200,
@@ -41,6 +43,7 @@ impl CPU {
             opcode: 0,
             keypad: keypad::Keypad::new(),
             display,
+            audio,
         };
 
         // load font
@@ -71,13 +74,14 @@ impl CPU {
         // Decode
         self.execute();
 
-        // Apparently this should only be done 60 times per second
         if self.delay_timer > 0 {
             self.delay_timer -= 1;
         }
         if self.sound_timer > 0 {
-            // play sound
+            self.audio.play();
             self.sound_timer -= 1;
+        } else {
+            self.audio.pause();
         }
     }
 

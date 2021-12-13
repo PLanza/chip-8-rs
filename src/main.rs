@@ -1,5 +1,6 @@
 extern crate sdl2;
 
+mod audio;
 mod cpu;
 mod display;
 mod keypad;
@@ -11,15 +12,19 @@ use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 
-const FRAME_TIME: u32 = 16666667;
+const FRAME_TIME: u32 = 46666667;
 
 fn main() {
     let sdl = sdl2::init().unwrap();
+
     let video_subsystem = sdl.video().unwrap();
+    let audio_subsystem = sdl.audio().unwrap();
+
     let display = display::Display::new(video_subsystem);
+    let audio = audio::Audio::new(audio_subsystem);
     let mut event_pump = sdl.event_pump().unwrap();
 
-    let mut chip_8 = cpu::CPU::new(display);
+    let mut chip_8 = cpu::CPU::new(display, audio);
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
